@@ -58,12 +58,12 @@ func run(log *slog.Logger) error {
 	}
 
 	businessConsumer, err := eventing.NewConsumer(cfg.KafkaBrokers, cfg.ConsumerGroup+"-business",
-		[]string{cfg.BusinessTopic}, decoder, application.HandleBusinessEvent, log)
+		cfg.Business, decoder, application.HandleBusinessEvent, log)
 	if err != nil {
 		return err
 	}
 	technicalConsumer, err := eventing.NewConsumer(cfg.KafkaBrokers, cfg.ConsumerGroup+"-technical",
-		[]string{cfg.TechnicalTopic}, decoder, application.HandleTechnicalEvent, log)
+		cfg.Technical, decoder, application.HandleTechnicalEvent, log)
 	if err != nil {
 		return err
 	}
@@ -79,7 +79,7 @@ func run(log *slog.Logger) error {
 
 	go func() {
 		defer wg.Done()
-		log.Info("consuming business events", "topic", cfg.BusinessTopic)
+		log.Info("consuming business events", "subscription", cfg.Business.String())
 		if err := businessConsumer.Run(ctx); err != nil {
 			log.Error("business consumer stopped", "error", err)
 		}
@@ -87,7 +87,7 @@ func run(log *slog.Logger) error {
 
 	go func() {
 		defer wg.Done()
-		log.Info("consuming technical events", "topic", cfg.TechnicalTopic)
+		log.Info("consuming technical events", "subscription", cfg.Technical.String())
 		if err := technicalConsumer.Run(ctx); err != nil {
 			log.Error("technical consumer stopped", "error", err)
 		}

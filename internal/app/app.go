@@ -102,6 +102,7 @@ func (a *App) CreateOrder(ctx context.Context, customerID string, items []domain
 			AggregateType: aggregateTypeOrder,
 			AggregateID:   order.ID,
 			EventType:     "OrderCreated",
+			Channel:       channelFor("OrderCreated"),
 			Payload:       newOrderCreated(order),
 		})
 	})
@@ -135,6 +136,7 @@ func (a *App) CancelOrder(ctx context.Context, id, reason string) (domain.Order,
 			AggregateType: aggregateTypeOrder,
 			AggregateID:   order.ID,
 			EventType:     "OrderCancelled",
+			Channel:       channelFor("OrderCancelled"),
 			Payload: orderCancelled{
 				EventID:    uuid.NewString(),
 				EventType:  "OrderCancelled",

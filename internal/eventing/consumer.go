@@ -39,17 +39,33 @@ type Consumer struct {
 	retryDelay  time.Duration
 }
 
-func NewConsumer(brokers []string, group string, topics []string, decoder *Decoder, handler Handler, log *slog.Logger) (*Consumer, error) {
-	client, err := kgo.NewClient(
+// Subscription describes what a consumer reads: either an explicit topic list
+// or a single regular expression.
+type Subscription interface {
+	IsPattern() bool
+	Values() []string
+	String() string
+}
+
+func NewConsumer(brokers []string, group string, sub Subscription, decoder *Decoder, handler Handler, log *slog.Logger) (*Consumer, error) {
+	opts := []kgo.Opt{
 		kgo.SeedBrokers(brokers...),
 		kgo.ConsumerGroup(group),
-		kgo.ConsumeTopics(topics...),
+		kgo.ConsumeTopics(sub.Values()...),
 		kgo.ConsumeResetOffset(kgo.NewOffset().AtStart()),
 		// Offsets are committed only after a batch has been handled, which
 		// gives at-least-once delivery. Handlers deduplicate on event_id.
 		kgo.DisableAutoCommit(),
 		kgo.BlockRebalanceOnPoll(),
-	)
+	}
+	if sub.IsPattern() {
+		// In regex mode the client re-resolves the pattern on every metadata
+		// refresh, so a topic created later — a new captured table, a new
+		// outbox channel — is picked up without a restart.
+		opts = append(opts, kgo.ConsumeRegex())
+	}
+
+	client, err := kgo.NewClient(opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -57,7 +73,7 @@ func NewConsumer(brokers []string, group string, topics []string, decoder *Decod
 		client:      client,
 		decoder:     decoder,
 		handler:     handler,
-		log:         log.With("group", group),
+		log:         log.With("group", group, "subscription", sub.String()),
 		maxAttempts: 5,
 		retryDelay:  time.Second,
 	}, nil

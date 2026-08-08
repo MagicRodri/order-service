@@ -15,17 +15,45 @@ outbox connector's job.
 This service is on both sides of both streams, and they are not
 interchangeable.
 
-**Technical events** are raw change-data-capture rows for the `orders` table,
-published by a Debezium Postgres connector to `tech.order.public.orders`. Their
-shape is the physical table: a column rename changes the event. They are
-consumed here only to fill `technical_audit_log`. No business decision may
-depend on them.
+**Technical events** are raw change-data-capture rows, one topic per table,
+named `tech.order.<schema>.<table>` — derived by the connector rather than
+listed, so a new table needs no configuration change. Their shape is the
+physical table: a column rename changes the event. They are consumed here only
+to fill `technical_audit_log`. No business decision may depend on them.
 
-**Business events** are explicit, versioned facts — `OrderCreated`,
-`OrderCancelled` — whose contracts live in [`schemas/`](schemas). They are
-written to the `outbox` table and routed by the Debezium outbox event router to
-`business.order.events`. This is the only surface other services are allowed to
-couple to.
+**Business events** are explicit, versioned facts whose contracts live in
+[`schemas/`](schemas). They are written to the `outbox` table and routed by the
+Debezium outbox event router onto a topic chosen per event type. This is the
+only surface other services are allowed to couple to.
+
+| Event            | Channel            | Topic                                |
+| ---------------- | ------------------ | ------------------------------------ |
+| `OrderCreated`   | `order.lifecycle`  | `business.order.lifecycle.events`    |
+| `OrderCancelled` | `order.settlement` | `business.order.settlement.events`   |
+
+## Splitting events across topics
+
+Each outbox row carries a `channel`, and the connector rewrites the topic to
+`business.<channel>.events`. It routes on that column alone and never learns an
+event type, so the split lives here, in `internal/app/events.go`:
+
+```go
+func channelFor(eventType string) string {
+    switch eventType {
+    case "OrderCreated":
+        return channelOrderLifecycle
+    case "OrderCancelled":
+        return channelOrderSettlement
+    default:
+        return aggregateTypeOrder   // never empty
+    }
+}
+```
+
+Lifecycle and settlement are separate because their audiences differ: the
+customer service follows lifecycle to track spend, while a billing consumer
+would follow settlement alone. Giving an event its own topic is a change to
+that function plus a redeploy — no connector edit.
 
 ## Why the outbox
 
@@ -114,9 +142,22 @@ curl -X POST localhost:8092/orders \
 | `KAFKA_BROKERS`       | `localhost:9092`             |
 | `SCHEMA_REGISTRY_URL` | `http://localhost:8081`      |
 | `CONSUMER_GROUP`      | `order-service`              |
-| `BUSINESS_TOPIC`      | `business.customer.events`   |
-| `TECHNICAL_TOPIC`     | `tech.order.public.orders`   |
+| `BUSINESS_TOPIC_PATTERN`  | `^business\.customer\..*` |
+| `BUSINESS_TOPICS`     | *(unset — overrides the pattern)* |
+| `TECHNICAL_TOPIC_PATTERN` | `^tech\.order\..*`     |
+| `TECHNICAL_TOPICS`    | *(unset — overrides the pattern)* |
 | `LOG_LEVEL`           | `info` (`debug` for verbose) |
+
+### Subscribing by pattern
+
+Topic names are derived — one per captured table, one per outbox channel — so
+this service subscribes to a *family* rather than to names. That matters here:
+`CustomerCreated` and `CustomerTierChanged` arrive on two different topics, and
+`^business\.customer\..*` covers both plus any channel added later, without a
+restart.
+
+Set `BUSINESS_TOPICS` or `TECHNICAL_TOPICS` to a comma-separated list to pin an
+exact set instead; an explicit list always wins over the pattern.
 
 Migrations in [`migrations/`](migrations) are embedded in the binary and applied
 at startup.
