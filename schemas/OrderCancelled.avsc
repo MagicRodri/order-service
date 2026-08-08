@@ -1,0 +1,15 @@
+{
+  "type": "record",
+  "name": "OrderCancelled",
+  "namespace": "com.magicrodri.order",
+  "doc": "Emitted when an order is cancelled. Carries the amount to reverse so the customer service can undo the spend it accumulated.",
+  "fields": [
+    { "name": "event_id", "type": "string" },
+    { "name": "event_type", "type": "string", "doc": "Always 'OrderCancelled'." },
+    { "name": "occurred_at", "type": "string" },
+    { "name": "order_id", "type": "string" },
+    { "name": "customer_id", "type": "string" },
+    { "name": "total_cents", "type": "long", "doc": "Amount originally charged, to be reversed." },
+    { "name": "reason", "type": "string", "default": "" }
+  ]
+}
