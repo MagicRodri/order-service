@@ -219,6 +219,11 @@ type OutboxRecord struct {
 	EventType     string
 	Payload       any
 	TraceID       string
+
+	// Channel selects the destination topic: the router rewrites it to
+	// business.<channel>.events. Leave it empty to fall back to one topic per
+	// aggregate type.
+	Channel string
 }
 
 func (t *Tx) AppendOutbox(ctx context.Context, rec OutboxRecord) error {
@@ -226,11 +231,15 @@ func (t *Tx) AppendOutbox(ctx context.Context, rec OutboxRecord) error {
 	if err != nil {
 		return fmt.Errorf("marshal outbox payload: %w", err)
 	}
+	channel := rec.Channel
+	if channel == "" {
+		channel = rec.AggregateType
+	}
 	_, err = t.tx.Exec(ctx,
-		`INSERT INTO outbox (id, aggregate_type, aggregate_id, event_type, payload, trace_id, created_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+		`INSERT INTO outbox (id, aggregate_type, aggregate_id, event_type, channel, payload, trace_id, created_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
 		uuid.NewString(), rec.AggregateType, rec.AggregateID, rec.EventType,
-		payload, rec.TraceID, time.Now().UTC())
+		channel, payload, rec.TraceID, time.Now().UTC())
 	return err
 }
 
