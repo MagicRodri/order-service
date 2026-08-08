@@ -29,7 +29,8 @@ func (a *App) HandleBusinessEvent(ctx context.Context, msg eventing.Message) err
 		return nil
 	}
 	if eventID == "" || customerID == "" {
-		return fmt.Errorf("malformed %s: event_id=%q customer_id=%q", eventType, eventID, customerID)
+		return fmt.Errorf("malformed %s: event_id=%q customer_id=%q; record actually carries %v",
+			eventType, eventID, customerID, eventing.FieldNames(msg.Value))
 	}
 
 	return a.store.InTx(ctx, func(ctx context.Context, tx *store.Tx) error {
