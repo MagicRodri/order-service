@@ -108,3 +108,65 @@ func TestEventTypePrefersHeader(t *testing.T) {
 		t.Errorf("EventType() fallback = %q, want OrderCreated", got)
 	}
 }
+
+// Debezium's outbox router emits an optional value, which the Avro converter
+// encodes as ["null", record]. Decoding that yields a single-entry map keyed by
+// the branch's type name, hiding the record's fields one level down — the
+// decode succeeds and every field then reads as empty.
+func TestDecodeUnwrapsTopLevelUnion(t *testing.T) {
+	const unionSchema = `["null",{"type":"record","name":"Value",` +
+		`"namespace":"business.customer.lifecycle.events","fields":[` +
+		`{"name":"event_id","type":["null","string"],"default":null},` +
+		`{"name":"customer_id","type":["null","string"],"default":null},` +
+		`{"name":"tier","type":["null","string"],"default":null}]}]`
+
+	schema, err := avro.Parse(unionSchema)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if schema.Type() != avro.Union {
+		t.Fatalf("schema type = %q, want union", schema.Type())
+	}
+
+	encoded, err := avro.Marshal(schema, map[string]any{
+		"business.customer.lifecycle.events.Value": map[string]any{
+			"event_id":    map[string]any{"string": "evt-1"},
+			"customer_id": map[string]any{"string": "cust-1"},
+			"tier":        map[string]any{"string": "GOLD"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+
+	wrapped := map[string]any{}
+	if err := avro.Unmarshal(schema, encoded, &wrapped); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if _, hasField := wrapped["event_id"]; hasField {
+		t.Fatal("test no longer reproduces the wrapping it is meant to cover")
+	}
+
+	record := unwrapUnionRecord(schema, wrapped)
+	if got := String(record, "event_id"); got != "evt-1" {
+		t.Errorf("event_id = %q, want evt-1", got)
+	}
+	if got := String(record, "customer_id"); got != "cust-1" {
+		t.Errorf("customer_id = %q, want cust-1", got)
+	}
+	if got := String(record, "tier"); got != "GOLD" {
+		t.Errorf("tier = %q, want GOLD", got)
+	}
+}
+
+// A plain record must pass through untouched.
+func TestUnwrapLeavesPlainRecordAlone(t *testing.T) {
+	schema, err := avro.Parse(`{"type":"record","name":"R","fields":[{"name":"a","type":"string"}]}`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	record := map[string]any{"a": "kept"}
+	if got := unwrapUnionRecord(schema, record); got["a"] != "kept" {
+		t.Errorf("plain record was altered: %v", got)
+	}
+}
