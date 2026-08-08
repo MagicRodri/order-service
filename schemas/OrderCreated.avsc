@@ -1,0 +1,19 @@
+{
+  "type": "record",
+  "name": "OrderCreated",
+  "namespace": "com.magicrodri.order",
+  "doc": "Emitted when an order is accepted. Payload of an outbox row with aggregate_type='order'. The customer service consumes this to accumulate lifetime spend.",
+  "fields": [
+    { "name": "event_id", "type": "string", "doc": "UUID, unique per event. Consumers use it for idempotency." },
+    { "name": "event_type", "type": "string", "doc": "Always 'OrderCreated'." },
+    { "name": "occurred_at", "type": "string", "doc": "RFC3339 UTC timestamp of the state change." },
+    { "name": "order_id", "type": "string" },
+    { "name": "customer_id", "type": "string" },
+    { "name": "subtotal_cents", "type": "long" },
+    { "name": "discount_cents", "type": "long" },
+    { "name": "total_cents", "type": "long", "doc": "Amount actually charged: subtotal minus discount." },
+    { "name": "currency", "type": "string" },
+    { "name": "customer_tier", "type": "string", "doc": "Tier used to price this order, as known locally when it was placed." },
+    { "name": "item_count", "type": "int" }
+  ]
+}
