@@ -3,6 +3,7 @@ package eventing
 import (
 	"encoding/json"
 	"fmt"
+	"sort"
 )
 
 // Avro unions decode to map[string]any keyed by the branch type name, e.g.
@@ -69,4 +70,19 @@ func JSON(v any) ([]byte, error) {
 		return nil, nil
 	}
 	return json.Marshal(v)
+}
+
+// FieldNames lists a decoded record's top-level fields, sorted.
+//
+// It exists so a "missing field" error can report what actually arrived rather
+// than only what was expected: an Avro payload shaped differently from the
+// contract decodes cleanly and then reads as empty everywhere, which is
+// indistinguishable from an empty event until you can see the field names.
+func FieldNames(rec map[string]any) []string {
+	names := make([]string, 0, len(rec))
+	for name := range rec {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
 }
