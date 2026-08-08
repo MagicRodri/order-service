@@ -1,6 +1,9 @@
 package config
 
-import "testing"
+import (
+	"testing"
+	"time"
+)
 
 func TestSelectorPrefersExplicitTopics(t *testing.T) {
 	s := TopicSelector{Topics: []string{"a", "b"}, Pattern: `^ignored\..*`}
@@ -50,5 +53,21 @@ func TestSplitListTrimsAndDropsBlanks(t *testing.T) {
 	}
 	if splitList("") != nil {
 		t.Error("an empty string must yield no topics, so the pattern is used")
+	}
+}
+
+func TestMetadataDiscoveryIntervalParsing(t *testing.T) {
+	// A bad or absent value must fall back rather than yield zero, which
+	// franz-go would reject as an invalid metadata age.
+	cases := map[string]bool{"": false, "not-a-duration": false, "0s": false, "-5s": false, "30s": true}
+	for raw, wantParsed := range cases {
+		t.Setenv("METADATA_DISCOVERY_INTERVAL", raw)
+		got := envDuration("METADATA_DISCOVERY_INTERVAL", 15*time.Second)
+		if wantParsed && got != 30*time.Second {
+			t.Errorf("envDuration(%q) = %v, want 30s", raw, got)
+		}
+		if !wantParsed && got != 15*time.Second {
+			t.Errorf("envDuration(%q) = %v, want the 15s default", raw, got)
+		}
 	}
 }

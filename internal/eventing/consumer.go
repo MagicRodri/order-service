@@ -47,7 +47,7 @@ type Subscription interface {
 	String() string
 }
 
-func NewConsumer(brokers []string, group string, sub Subscription, decoder *Decoder, handler Handler, log *slog.Logger) (*Consumer, error) {
+func NewConsumer(brokers []string, group string, sub Subscription, discoveryInterval time.Duration, decoder *Decoder, handler Handler, log *slog.Logger) (*Consumer, error) {
 	opts := []kgo.Opt{
 		kgo.SeedBrokers(brokers...),
 		kgo.ConsumerGroup(group),
@@ -62,7 +62,14 @@ func NewConsumer(brokers []string, group string, sub Subscription, decoder *Deco
 		// In regex mode the client re-resolves the pattern on every metadata
 		// refresh, so a topic created later — a new captured table, a new
 		// outbox channel — is picked up without a restart.
-		opts = append(opts, kgo.ConsumeRegex())
+		//
+		// That refresh is therefore the discovery latency, and franz-go's
+		// default of 5 minutes means a brand new topic sits unread for minutes
+		// while the consumer looks idle. Shorten it to keep the delay bounded.
+		opts = append(opts,
+			kgo.ConsumeRegex(),
+			kgo.MetadataMaxAge(discoveryInterval),
+		)
 	}
 
 	client, err := kgo.NewClient(opts...)

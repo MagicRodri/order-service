@@ -69,6 +69,13 @@ type Config struct {
 	// depend on it.
 	Technical TopicSelector
 
+	// MetadataDiscoveryInterval bounds how long a newly created topic stays
+	// invisible to a pattern subscription. franz-go re-evaluates the pattern on
+	// every metadata refresh, and its default of 5 minutes leaves a brand new
+	// topic unread for minutes while the consumer looks idle. Short here because
+	// the cluster is tiny; raise it where listing every topic is expensive.
+	MetadataDiscoveryInterval time.Duration
+
 	ShutdownTimeout time.Duration
 }
 
@@ -87,7 +94,8 @@ func Load() (Config, error) {
 			Topics:  splitList(os.Getenv("TECHNICAL_TOPICS")),
 			Pattern: env("TECHNICAL_TOPIC_PATTERN", `^tech\.order\..*`),
 		},
-		ShutdownTimeout: 15 * time.Second,
+		MetadataDiscoveryInterval: envDuration("METADATA_DISCOVERY_INTERVAL", 15*time.Second),
+		ShutdownTimeout:           15 * time.Second,
 	}
 
 	if cfg.DatabaseURL == "" {
@@ -100,6 +108,15 @@ func Load() (Config, error) {
 		return cfg, err
 	}
 	return cfg, nil
+}
+
+func envDuration(key string, def time.Duration) time.Duration {
+	if v := os.Getenv(key); v != "" {
+		if d, err := time.ParseDuration(v); err == nil && d > 0 {
+			return d
+		}
+	}
+	return def
 }
 
 func env(key, def string) string {

@@ -146,6 +146,7 @@ curl -X POST localhost:8092/orders \
 | `BUSINESS_TOPICS`     | *(unset — overrides the pattern)* |
 | `TECHNICAL_TOPIC_PATTERN` | `^tech\.order\..*`     |
 | `TECHNICAL_TOPICS`    | *(unset — overrides the pattern)* |
+| `METADATA_DISCOVERY_INTERVAL` | `15s`                |
 | `LOG_LEVEL`           | `info` (`debug` for verbose) |
 
 ### Subscribing by pattern
@@ -158,6 +159,13 @@ restart.
 
 Set `BUSINESS_TOPICS` or `TECHNICAL_TOPICS` to a comma-separated list to pin an
 exact set instead; an explicit list always wins over the pattern.
+
+The pattern is re-evaluated on every Kafka metadata refresh, so that refresh
+*is* the discovery latency for a topic that did not exist when the service
+started. franz-go defaults it to 5 minutes, which leaves a brand new channel
+unread for minutes while the consumer looks idle;
+`METADATA_DISCOVERY_INTERVAL` sets it to 15s here. Raise it on a cluster where
+listing every topic is expensive.
 
 Migrations in [`migrations/`](migrations) are embedded in the binary and applied
 at startup.
