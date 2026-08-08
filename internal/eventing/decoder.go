@@ -45,7 +45,29 @@ func (d *Decoder) Decode(ctx context.Context, msg []byte) (map[string]any, error
 	if err := avro.Unmarshal(schema, body, &out); err != nil {
 		return nil, fmt.Errorf("avro decode with schema %d: %w", id, err)
 	}
-	return out, nil
+	return unwrapUnionRecord(schema, out), nil
+}
+
+// unwrapUnionRecord lifts a record out of a top-level Avro union.
+//
+// Kafka Connect marks a value schema optional whenever the source may be null,
+// and the Avro converter encodes that as ["null", record] — which is what the
+// outbox router produces for an expanded payload. hamba decodes a union into a
+// single-entry map keyed by the branch's fully qualified type name, so the
+// record's own fields sit one level below the top.
+//
+// Without this, every field lookup returns empty and the decode itself still
+// succeeds, so a perfectly good event reads as though it carried nothing.
+func unwrapUnionRecord(schema avro.Schema, decoded map[string]any) map[string]any {
+	if schema == nil || schema.Type() != avro.Union || len(decoded) != 1 {
+		return decoded
+	}
+	for _, branch := range decoded {
+		if fields, ok := branch.(map[string]any); ok {
+			return fields
+		}
+	}
+	return decoded
 }
 
 func (d *Decoder) schemaByID(ctx context.Context, id int) (avro.Schema, error) {
