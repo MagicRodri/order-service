@@ -58,12 +58,12 @@ func run(log *slog.Logger) error {
 	}
 
 	businessConsumer, err := eventing.NewConsumer(cfg.KafkaBrokers, cfg.ConsumerGroup+"-business",
-		cfg.Business, decoder, application.HandleBusinessEvent, log)
+		cfg.Business, cfg.MetadataDiscoveryInterval, decoder, application.HandleBusinessEvent, log)
 	if err != nil {
 		return err
 	}
 	technicalConsumer, err := eventing.NewConsumer(cfg.KafkaBrokers, cfg.ConsumerGroup+"-technical",
-		cfg.Technical, decoder, application.HandleTechnicalEvent, log)
+		cfg.Technical, cfg.MetadataDiscoveryInterval, decoder, application.HandleTechnicalEvent, log)
 	if err != nil {
 		return err
 	}
